@@ -6,6 +6,16 @@ const fileList = document.getElementById('file-list');
 const searchInput = document.getElementById('search');
 const loginBtn = document.getElementById('login-btn');
 
+function authenticate() {
+  gapi.auth2.getAuthInstance().signIn()
+    .then(() => {
+      console.log('Signed in');
+    })
+    .catch(error => {
+      console.error(error);
+    });
+}
+
 uploadBtn.addEventListener('click', () => {
   const file = fileInput.files[0];
   const fileName = file.name;
