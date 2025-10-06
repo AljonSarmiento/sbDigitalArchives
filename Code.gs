@@ -1,116 +1,65 @@
-// --- CONFIGURATION ---
-// SET YOUR ARCHIVES ROOT FOLDER ID HERE
-const ROOT_FOLDER_ID = 'YOUR_ROOT_DRIVE_FOLDER_ID'; 
-
-// SET A SECRET KEY FOR UPLOAD AUTHORIZATION
-// Only users who know this key can upload files. Change this to a strong, secret value.
-const UPLOAD_SECRET_KEY = 'YOUR_VERY_SECRET_KEY_123';
-// ---------------------
-
-/**
- * Handles GET requests from the frontend for listing and searching files.
- * @param {object} e - The request parameters object.
- * @returns {GoogleAppsScript.Content.TextOutput} JSON response.
- */
-function doGet(e) {
-  const action = e.parameter.action;
-
-  if (action === 'list') {
-    return handleListFiles(e.parameter);
-  }
-
-  return responseJSON({ error: 'Invalid action' }, 400);
+// Code.gs
+function doGet() {
+  return HtmlService.createHtmlOutputFromFile('index');
 }
 
-/**
- * Handles POST requests from the frontend, primarily for file upload.
- * @param {object} e - The request parameters object containing file data.
- * @returns {GoogleAppsScript.Content.TextOutput} JSON response.
- */
-function doPost(e) {
-  // Check for the 'action' parameter from the query string (e.g., /?action=upload)
-  const action = e.parameter.action;
-
-  if (action === 'upload') {
-    return handleUploadFile(e);
-  }
-
-  return responseJSON({ error: 'Invalid action' }, 400);
+function uploadFile(file, fileName, mimeType) {
+  var folder = getFolder();
+  var file = folder.createFile(file);
+  file.setName(fileName);
+  return file.getId();
 }
 
-// ------------------- FILE LISTING & SEARCH HANDLER -------------------
+function getFiles() {
+  var folder = getFolder();
+  var files = folder.getFiles();
+  var fileList = [];
+  while (files.hasNext()) {
+    var file = files.next();
+    fileList.push({
+      id: file.getId(),
+      name: file.getName(),
+      date: file.getLastUpdated(),
+      type: file.getMimeType()
+    });
+  }
+  return fileList;
+}
 
-/**
- * Searches and lists files based on criteria.
- * @param {object} params - Query parameters (search, year, type).
- * @returns {GoogleAppsScript.Content.TextOutput} JSON response.
- */
-function handleListFiles(params) {
-  try {
-    const rootFolder = DriveApp.getFolderById(ROOT_FOLDER_ID);
-    
-    // 1. Build the Search Query (Q-syntax)
-    let query = `'${rootFolder.getId()}' in parents and trashed = false`;
-    
-    // Keyword/Name search
-    if (params.search) {
-      query += ` and fullText contains '${params.search.trim()}'`;
-    }
+function getFolder() {
+  var folders = DriveApp.getFoldersByName('Digital Archives');
+  var folder;
+  if (folders.hasNext()) {
+    folder = folders.next();
+  } else {
+    folder = DriveApp.createFolder('Digital Archives');
+  }
+  var year = new Date().getFullYear().toString();
+  var yearFolder = folder.getFoldersByName(year);
+  if (yearFolder.hasNext()) {
+    return yearFolder.next();
+  } else {
+    return folder.createFolder(year);
+  }
+}
 
-    // MIME Type filtering (simplification for common types)
-    if (params.type) {
-      const typeMap = {
-        'pdf': 'application/pdf',
-        'word': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document or application/msword',
-        'excel': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet or application/vnd.ms-excel',
-        'ppt': 'application/vnd.openxmlformats-officedocument.presentationml.presentation or application/vnd.ms-powerpoint'
-      };
-      const mimeQuery = typeMap[params.type.toLowerCase()];
-      if (mimeQuery) {
-        query += ` and (mimeType = '${mimeQuery.replace(/ or /g, "' or mimeType = '")}')`;
-      }
-    }
-    
-    // 2. Execute search
-    const fileIterator = DriveApp.searchFiles(query);
-    const allFiles = [];
-    const yearFolders = {};
-    const processedFiles = [];
-
-    // Collect all files and folder structure
-    while (fileIterator.hasNext()) {
-      const file = fileIterator.next();
-      
-      // Get parent folder name to check for year-based sorting
-      const parent = file.getParents().next();
-      const parentName = parent.getName();
-      
-      // Check if file is in a year folder and matches the year filter
-      const yearMatch = parentName.match(/^\d{4}$/); // Matches 4 digits (e.g., '2025')
-      
-      if (yearMatch) {
-          yearFolders[parentName] = true; // Track available years
-          
-          if (params.year && params.year !== parentName) {
-              continue; // Skip file if year filter is active and doesn't match
-          }
-      } else {
-          // If no year filter is applied, we can still include files not in a year folder
-          if (params.year) {
-              continue; // Skip if year filter is active and the file isn't in a named year folder
-          }
-      }
-
-
-      processedFiles.push({
+function searchFiles(query) {
+  var folder = getFolder();
+  var files = folder.getFiles();
+  var results = [];
+  while (files.hasNext()) {
+    var file = files.next();
+    if (file.getName().includes(query) || file.getDescription().includes(query)) {
+      results.push({
         id: file.getId(),
         name: file.getName(),
-        mimeType: file.getMimeType(),
-        date: file.getDateCreated().getTime(),
-        url: file.getUrl(), // Link to the Google Drive file viewer
-        type: file.getMimeType().split('/').pop()
+        date: file.getLastUpdated(),
+        type: file.getMimeType()
       });
     }
+  }
+  return results;
+}    }
 
     // 3. Prepare response
     const availableYears = Object.keys(yearFolders).sort().reverse();
