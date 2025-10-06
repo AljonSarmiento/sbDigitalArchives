@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Digital Archives</title>
+    <style>
+        /* Minimal and Responsive CSS */
+        body { font-family: sans-serif; margin: 0; padding: 0; background-color: #f4f7f9; color: #333; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        header { background-color: #007bff; color: white; padding: 15px 20px; text-align: center; margin-bottom: 20px; }
+        h1 { margin: 0; font-size: 1.8em; }
+        
+        /* Controls & Filters */
+        .controls { display: flex; flex-wrap: wrap; gap: 15px; margin-bottom: 20px; align-items: center; }
+        .controls input[type="text"], .controls select { padding: 10px; border: 1px solid #ccc; border-radius: 4px; flex-grow: 1; min-width: 150px; }
+        .upload-area { border: 2px dashed #007bff; padding: 20px; border-radius: 8px; margin-bottom: 20px; background-color: white; }
+        .upload-area input, .upload-area button { margin-top: 10px; padding: 10px; border-radius: 4px; border: 1px solid #ccc; }
+        .upload-area button { background-color: #28a745; color: white; cursor: pointer; border: none; }
+        .upload-area button:hover { background-color: #218838; }
+
+        /* File List/Card View */
+        #file-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
+        .file-card { background-color: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transition: transform 0.2s; }
+        .file-card:hover { transform: translateY(-3px); box-shadow: 0 4px 8px rgba(0,0,0,0.15); }
+        .file-card h3 { margin-top: 0; font-size: 1.2em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .file-card p { margin: 5px 0; font-size: 0.9em; color: #666; }
+        .file-card a { display: inline-block; margin-top: 10px; padding: 8px 15px; background-color: #007bff; color: white; text-decoration: none; border-radius: 4px; font-size: 0.9em; }
+        .file-card a:hover { background-color: #0056b3; }
+        .file-icon { font-weight: bold; font-size: 1.5em; margin-right: 10px; }
+
+        /* Mobile Responsiveness */
+        @media (max-width: 600px) {
+            .controls { flex-direction: column; }
+            .controls input[type="text"], .controls select { width: 100%; box-sizing: border-box; }
+            .upload-area { padding: 15px; }
+            .file-card h3 { font-size: 1.1em; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Digital Archives Web App</h1>
+    </header>
+    <div class="container">
+        
+        <div class="upload-area">
+            <h2>Upload New File (Authorized Users)</h2>
+            <input type="file" id="file-input" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx">
+            <input type="password" id="secret-key" placeholder="Enter Secret Upload Key" style="width: 100%; box-sizing: border-box;">
+            <button onclick="uploadFile()">Upload to Drive</button>
+            <p id="upload-status" style="margin-top: 10px; font-weight: bold;"></p>
+        </div>
+        
+        <hr>
+
+        <div class="controls">
+            <input type="text" id="search-bar" placeholder="Search by name or keyword..." onkeyup="fetchFiles()">
+            <select id="year-filter" onchange="fetchFiles()">
+                <option value="">All Years</option>
+                </select>
+            <select id="type-filter" onchange="fetchFiles()">
+                <option value="">All Types</option>
+                <option value="pdf">PDF</option>
+                <option value="word">Word (doc/docx)</option>
+                <option value="excel">Excel (xls/xlsx)</option>
+                <option value="ppt">PPT (ppt/pptx)</option>
+            </select>
+        </div>
+        
+        <h2>Archived Documents</h2>
+        <div id="file-list">
+            <p>Loading files...</p>
+        </div>
+        <p id="loading-status" style="text-align: center; padding: 20px;"></p>
+    </div>
+
+    <script>
+        // *** CONFIGURATION ***
+        // Replace this with YOUR deployed Google Apps Script Web App URL
+        const BACKEND_API_URL = 'YOUR_APPS_SCRIPT_WEB_APP_URL';
+        // -----------------------
+
+        /**
+         * Fetches files from the Google Apps Script backend based on search/filters.
+         */
+        async function fetchFiles() {
+            const search = document.getElementById('search-bar').value;
+            const year = document.getElementById('year-filter').value;
+            const type = document.getElementById('type-filter').value;
+            const status = document.getElementById('loading-status');
+            const list = document.getElementById('file-list');
+
+            status.textContent = 'Searching...';
+            list.innerHTML = '';
+
+            try {
+                const url = `${BACKEND_API_URL}?action=list&search=${encodeURIComponent(search)}&year=${encodeURIComponent(year)}&type=${encodeURIComponent(type)}`;
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (data.error) {
+                    list.innerHTML = `<p style="color: red;">Error: ${data.error}</p>`;
+                    status.textContent = '';
+                    return;
+                }
+
+                renderFiles(data.files);
+                populateYearFilter(data.availableYears);
+                status.textContent = data.files.length === 0 ? 'No files found matching your criteria.' : '';
+
+            } catch (e) {
+                list.innerHTML = `<p style="color: red;">Failed to connect to the backend. Check the API URL and deployment. ${e.message}</p>`;
+                status.textContent = '';
+            }
+        }
+
+        /**
+         * Renders the file list into the card view.
+         * @param {Array} files - Array of file objects.
+         */
+        function renderFiles(files) {
+            const list = document.getElementById('file-list');
+            list.innerHTML = ''; // Clear existing list
+
+            files.forEach(file => {
+                const card = document.createElement('div');
+                card.className = 'file-card';
+                
+                let icon = '';
+                if (file.type.includes('pdf')) icon = '📄';
+                else if (file.type.includes('word')) icon = '📝';
+                else if (file.type.includes('excel')) icon = '📊';
+                else if (file.type.includes('presentation')) icon = '🖼️';
+                else icon = '📎';
+
+                card.innerHTML = `
+                    <h3><span class="file-icon">${icon}</span>${file.name}</h3>
+                    <p><strong>Type:</strong> ${file.mimeType.split('/').pop().toUpperCase()}</p>
+                    <p><strong>Uploaded:</strong> ${new Date(file.date).toLocaleDateString()}</p>
+                    <a href="${file.url}" target="_blank">Preview / Read Online</a>
+                `;
+                list.appendChild(card);
+            });
+        }
+
+        /**
+         * Populates the year filter dropdown.
+         * @param {Array} years - Array of available year strings.
+         */
+        function populateYearFilter(years) {
+            const yearFilter = document.getElementById('year-filter');
+            const currentSelectedYear = yearFilter.value;
+            yearFilter.innerHTML = '<option value="">All Years</option>'; // Keep the default option
+            
+            years.sort().reverse().forEach(year => {
+                const option = document.createElement('option');
+                option.value = year;
+                option.textContent = year;
+                if (year === currentSelectedYear) {
+                    option.selected = true;
+                }
+                yearFilter.appendChild(option);
+            });
+        }
+
+        /**
+         * Handles the file upload process.
+         */
+        async function uploadFile() {
+            const fileInput = document.getElementById('file-input');
+            const secretKey = document.getElementById('secret-key').value;
+            const status = document.getElementById('upload-status');
+
+            if (!fileInput.files.length) {
+                status.textContent = 'Please select a file to upload.';
+                status.style.color = 'orange';
+                return;
+            }
+            if (!secretKey) {
+                status.textContent = 'Please enter the Secret Upload Key.';
+                status.style.color = 'orange';
+                return;
+            }
+
+            const file = fileInput.files[0];
+            status.textContent = 'Uploading... Please wait.';
+            status.style.color = 'blue';
+
+            try {
+                // Create a FormData object to send the file and key
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('secret', secretKey);
+                formData.append('action', 'upload');
+
+                // We must use a separate fetch call for file upload in this GAS architecture
+                // The GAS backend will handle the base64 encoding/decoding
+                const url = `${BACKEND_API_URL}?action=upload`;
+
+                const response = await fetch(url, {
+                    method: 'POST',
+                    body: formData // The GAS backend will parse this multipart/form-data
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    status.textContent = `Upload successful! File: ${data.name}`;
+                    status.style.color = 'green';
+                    fetchFiles(); // Refresh list
+                } else {
+                    status.textContent = `Upload Failed: ${data.error || 'Unknown error'}`;
+                    status.style.color = 'red';
+                }
+            } catch (e) {
+                status.textContent = `An error occurred during upload: ${e.message}`;
+                status.style.color = 'red';
+            }
+        }
+
+        // Initial load
+        window.onload = () => {
+            fetchFiles();
+        };
+
+    </script>
+</body>
+  </html>
+  
