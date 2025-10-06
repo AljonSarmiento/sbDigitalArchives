@@ -16,5 +16,16 @@
     <div id="file-list"></div>
   </main>
   <script src="script.js"></script>
+  <!-- index.html -->
+<script src="https://apis.google.com/js/platform.js" async defer></script>
+<script>
+  function onSignIn(googleUser) {
+    var profile = googleUser.getBasicProfile();
+    console.log('ID: ' + profile.getId());
+    console.log('Name: ' + profile.getName());
+    console.log('Email: ' + profile.getEmail());
+  }
+</script>
+  
 </body>
 </html>
