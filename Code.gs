@@ -3,6 +3,26 @@ function doGet() {
   return HtmlService.createHtmlOutputFromFile('index');
 }
 
+function getFiles(year, fileType) {
+  var folder = getFolder();
+  var files = folder.getFiles();
+  var fileList = [];
+  while (files.hasNext()) {
+    var file = files.next();
+    var fileYear = file.getLastUpdated().getFullYear().toString();
+    var fileTypeMatch = file.getMimeType().includes(fileType);
+    if ((year === '' || fileYear === year) && (fileType === '' || fileTypeMatch)) {
+      fileList.push({
+        id: file.getId(),
+        name: file.getName(),
+        date: file.getLastUpdated(),
+        type: file.getMimeType()
+      });
+    }
+  }
+  return fileList;
+}
+
 function uploadFile(file, fileName, mimeType) {
   var folder = getFolder();
   var file = folder.createFile(file);
